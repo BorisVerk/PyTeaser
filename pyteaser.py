@@ -12,7 +12,7 @@ ideal = 20.0
 grab_link = Goose().extract
 
 
-def SummarizeUrl(url):
+def summarize_url(url):
     try:
         article = grab_link(url=url)
 
@@ -24,10 +24,10 @@ def SummarizeUrl(url):
         return
 
     if article and article.cleaned_text and article.title:
-        return Summarize(article.title, article.cleaned_text)
+        return summarize(article.title, article.cleaned_text)
 
 
-def Summarize(title, text):
+def summarize(title, text):
     sentences = split_sentences(text)
     keys = keywords(text)
     titleWords = split_words(title)
@@ -185,3 +185,27 @@ def sentence_position(i, size):
         return 0.15
     else:
         return 0
+
+
+def SummarizeUrl(url):
+    import warnings
+
+    warnings.warn(
+        "SummarizeUrl(url) has been deprecated. "
+        "Please use summarize_url(title, text) (with a lower case letter) instead.",
+        DeprecationWarning,
+    )
+
+    return summarize_url(url)
+
+
+def Summarize(title, text):
+    import warnings
+
+    warnings.warn(
+        "Summarize(title, text) using a capital letter has been deprecated. "
+        "Please use summarize(title, text) (with a lower case letter) instead.",
+        DeprecationWarning,
+    )
+
+    return summarize(title, text)
