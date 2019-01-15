@@ -2,24 +2,29 @@ from goose3 import Goose
 from collections import Counter
 from math import fabs
 import re
+import sys
 
 with open("stopwords_en.txt") as f:
     stop_words = {line.rstrip("\n") for line in f if line}
     stop_words.update(["-", " ", ",", "."])
 ideal = 20.0
 
+grab_link = Goose().extract
+
 
 def SummarizeUrl(url):
     try:
-        article = grab_link(url)
-    except IOError:
-        print("IOError")
-        return None
+        article = grab_link(url=url)
 
-    if not (article and article.cleaned_text and article.title):
-        return None
+    except IOError as e:
+        print("Couldn't fetch the URL:", e, file=sys.stderr)
+        return
+    except ValueError as e:
+        print("Goose failed to extract article from url:", e, file=sys.stderr)
+        return
 
-    return Summarize(article.title, article.cleaned_text)
+    if article and article.cleaned_text and article.title:
+        return Summarize(article.title, article.cleaned_text)
 
 
 def Summarize(title, text):
@@ -33,20 +38,6 @@ def Summarize(title, text):
     # score setences, and use the top 5 sentences
     sentence_ranks = score(sentences, titleWords, keys)
     return [sentence for sentence, score in sentence_ranks.most_common(5)]
-
-
-goose = Goose()
-
-
-def grab_link(url):
-    # extract article information using Python Goose
-    try:
-        article = goose.extract(url=url)
-        return article
-    except ValueError:
-        print("Goose failed to extract article from url")
-        return None
-    return None
 
 
 def score(sentences, titleWords, keywords):
