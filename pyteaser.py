@@ -4,7 +4,7 @@ from math import fabs
 import re
 import sys
 
-with open("stopwords_en.txt") as f:
+with open("stopwords/en.txt") as f:
     stop_words = {line.rstrip("\n") for line in f if line}
     stop_words.update(["-", " ", ",", "."])
 ideal = 20.0
