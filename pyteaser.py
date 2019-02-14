@@ -1,13 +1,12 @@
 from goose3 import Goose
 from collections import Counter
-from math import fabs
 import re
 import sys
 
 with open("stopwords/en.txt") as f:
     stop_words = {line.rstrip("\n") for line in f if line}
     stop_words.update(["-", " ", ",", "."])
-ideal = 20.0
+ideal_sentence_length = 20
 
 grab_link = Goose().extract
 
@@ -15,7 +14,6 @@ grab_link = Goose().extract
 def summarize_url(url):
     try:
         article = grab_link(url=url)
-
     except IOError as e:
         print("Couldn't fetch the URL:", e, file=sys.stderr)
         return
@@ -30,48 +28,49 @@ def summarize_url(url):
 def summarize(title, text):
     sentences = split_sentences(text)
     keys = keywords(text)
-    titleWords = split_words(title)
+    title_words = split_words(title)
 
     if len(sentences) <= 5:
         return sentences
 
     # score setences, and use the top 5 sentences
-    sentence_ranks = score(sentences, titleWords, keys)
-    return [sentence for sentence, score in sentence_ranks.most_common(5)]
+    sentence_ranks = score(sentences, title_words, keys)
+    #print(sentence_ranks)
+    return [sentence for sentence, score in sentence_ranks[:5]]
 
 
-def score(sentences, titleWords, keywords):
-    # score sentences based on different features
+def score(sentences, title_words, keywords):
+    num_sentences = len(sentences)
+    sentence_scores = []
 
-    senSize = len(sentences)
-    ranks = Counter()
-    for i, s in enumerate(sentences):
-        sentence = split_words(s)
-        titleFeature = title_score(titleWords, sentence)
-        sentenceLength = length_score(sentence)
-        sentencePosition = sentence_position(i + 1, senSize)
-        sbsFeature = sbs(sentence, keywords)
-        dbsFeature = dbs(sentence, keywords)
-        frequency = (sbsFeature + dbsFeature) / 2.0 * 10.0
+    for i, sentence in enumerate(sentences):
+        words = split_words(sentence)
 
         # weighted average of scores from four categories
-        totalScore = (titleFeature * 1.5 + frequency * 2.0 + sentenceLength * 1.0 + sentencePosition * 1.0) / 4.0
-        ranks[s] = totalScore
-    return ranks
+        scores = [
+            title_score(title_words, words),
+            (sbs(words, keywords) + dbs(words, keywords)),
+            length_score(words),
+            sentence_position(i + 1, num_sentences),
+        ]
+        weights = [1.5, 10, 1, 1]
+        score = sum(score * weight / 4 for score, weight in zip(scores, weights))
+
+        sentence_scores.append((sentence, score))
+
+    # sort sentences by score in descending order
+    return sorted(sentence_scores, key=lambda x: x[1], reverse=True)
 
 
 def sbs(words, keywords):
-    score = 0.0
-    if len(words) == 0:
+    score = sum(keywords[word] for word in words if word in keywords)
+    if score == 0:
         return 0
-    for word in words:
-        if word in keywords:
-            score += keywords[word]
-    return (1.0 / fabs(len(words)) * score) / 10.0
+    return (1 / abs(len(words)) * score) / 10
 
 
 def dbs(words, keywords):
-    if len(words) == 0:
+    if not words:
         return 0
 
     summ = 0
@@ -95,7 +94,7 @@ def dbs(words, keywords):
 
 
 def split_words(text):
-    # split a string into array of words
+    # split a string into an array of words
     try:
         text = re.sub(r"[^\w ]", "", text)  # strip special chars
         return [x.strip(".").lower() for x in text.split()]
@@ -109,18 +108,9 @@ def keywords(text):
     ignores blacklisted words in stop_words,
     counts the number of occurrences of each word
     """
-    text = split_words(text)
-    numWords = len(text)  # of words before removing blacklist words
-    freq = Counter(x for x in text if x not in stop_words)
-
-    minSize = min(10, len(freq))  # get first 10
-    keywords = {x: y for x, y in freq.most_common(minSize)}  # recreate a dict
-
-    for k in keywords:
-        articleScore = keywords[k] * 1.0 / numWords
-        keywords[k] = articleScore * 1.5 + 1
-
-    return keywords
+    words = split_words(text)
+    freq = Counter(word for word in words if word not in stop_words)
+    return {word: count / len(words) * 1.5 + 1 for word, count in freq.most_common(10)}
 
 
 def split_sentences(text):
@@ -135,27 +125,24 @@ def split_sentences(text):
     """
 
     sentences = re.split('(?<![A-ZА-ЯЁ])([.!?]"?)(?=\s+"?[A-ZА-ЯЁ])', text)
-    s_iter = list(zip(*[iter(sentences[:-1])] * 2))
-    s_iter = ["".join(map(str, y)).lstrip() for y in s_iter]
-    s_iter.append(sentences[-1])
+    s_iter = zip(*[iter(sentences[:-1])] * 2)
+    s_iter = ["".join(y).lstrip() for y in s_iter]
+    s_iter.append(sentences[-1].lstrip())
     return s_iter
 
 
 def length_score(sentence):
-    return 1 - fabs(ideal - len(sentence)) / ideal
+    return 1 - abs(ideal_sentence_length - len(sentence)) / ideal_sentence_length
 
 
 def title_score(title, sentence):
     title = [x for x in title if x not in stop_words]
-    count = 0.0
-    for word in sentence:
-        if word not in stop_words and word in title:
-            count += 1.0
 
-    if len(title) == 0:
-        return 0.0
+    if not title:
+        return 0
 
-    return count / len(title)
+    words_in_title = sum(True for x in sentence if x not in stop_words and x in title)
+    return words_in_title / len(title)
 
 
 def sentence_position(i, size):
